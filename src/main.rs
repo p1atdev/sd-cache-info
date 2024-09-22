@@ -7,12 +7,17 @@ use anyhow::Result;
 use clap::{Arg, Parser};
 use futures::StreamExt;
 use image::ImageReader;
-use indicatif::ProgressBar;
+use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use rayon::iter::{ParallelBridge, ParallelIterator};
 use serde::Serialize;
 use walkdir::WalkDir;
 
+// image extensions
 const SUPPORTED_FILE_TYPES: [&str; 4] = ["jpg", "jpeg", "png", "webp"];
+
+// progress bar style
+const PROGRESS_BAR_TEMPLATE: &str =
+    "{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {pos:>7}/{len:7} ({eta})";
 
 #[derive(Debug, Clone, Parser)]
 struct Cli {
@@ -24,6 +29,11 @@ struct Cli {
 struct SubsetInfo {
     caption: String,
     resolution: (u32, u32),
+}
+
+fn get_progress_bar(size: u64) -> Result<ProgressBar> {
+    let style = ProgressStyle::with_template(PROGRESS_BAR_TEMPLATE)?;
+    Ok(ProgressBar::new(size).with_style(style))
 }
 
 #[tokio::main]
@@ -42,7 +52,7 @@ async fn main() -> Result<()> {
 
     println!("Found {} files", files_len);
 
-    let progress = ProgressBar::new(files_len as u64);
+    let progress = get_progress_bar(files_len as u64)?;
     let paths = progress
         .wrap_iter(WalkDir::new(&input_dir).into_iter())
         .par_bridge() // イテレータを並列処理する
@@ -69,8 +79,7 @@ async fn main() -> Result<()> {
 
     println!("Found {} images with captions", paths_len);
 
-    let progress = ProgressBar::new(paths_len as u64);
-
+    let progress = get_progress_bar(paths_len as u64)?;
     let metas = progress
         .wrap_stream(futures::stream::iter(paths))
         .map(|path| {

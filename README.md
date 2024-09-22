@@ -20,14 +20,14 @@ Example:
 ```bash
 ❯ time sd-cache-info ./data/1k
 Input directory: "./data/1k"
-Found 2000 files
-██████████████████████████████████████████████████████████ 2000/2000
+Found 2001 files
+  [00:00:00] [███████████████████████████████████]    2001/2001    (0s)
 Found 1000 images with captions
-██████████████████████████████████████████████████████████ 1000/1000
+  [00:00:00] [███████████████████████████████████]    1000/1000    (0s)
 Saving metadata cache...
 Metadata cache saved to "./data/1k/metadata_cache.json"
 
-real    0m0.128s
-user    0m0.089s
-sys     0m1.432s
+real    0m0.141s
+user    0m0.074s
+sys     0m1.453s
 ```
