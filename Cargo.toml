@@ -1,0 +1,17 @@
+[package]
+name = "sd-cache-info"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.89"
+clap = { version = "4.5.18", features = ["derive"] }
+futures = "0.3.30"
+image = "0.25.2"
+indicatif = { version = "0.17.8", features = ["futures", "rayon", "tokio"] }
+num_cpus = "1.16.0"
+rayon = "1.10.0"
+serde = { version = "1.0.210", features = ["derive"] }
+serde_json = "1.0.128"
+tokio = { version = "1.40.0", features = ["full"] }
+walkdir = "2.5.0"
