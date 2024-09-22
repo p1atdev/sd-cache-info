@@ -3,6 +3,10 @@ name = "sd-cache-info"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "sd-cache-info"
+path = "src/main.rs"
+
 [dependencies]
 anyhow = "1.0.89"
 clap = { version = "4.5.18", features = ["derive"] }

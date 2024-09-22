@@ -69,7 +69,9 @@ async fn main() -> Result<()> {
 
     println!("Found {} images with captions", paths_len);
 
-    let metas = ProgressBar::new(paths_len as u64)
+    let progress = ProgressBar::new(paths_len as u64);
+
+    let metas = progress
         .wrap_stream(futures::stream::iter(paths))
         .map(|path| {
             let image_path = path.clone();
@@ -99,6 +101,7 @@ async fn main() -> Result<()> {
         .collect::<Result<Vec<_>>>()?
         .into_iter()
         .collect::<HashMap<_, _>>();
+    progress.finish();
 
     println!("Saving metadata cache...");
 
