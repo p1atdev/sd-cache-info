@@ -1,13 +1,10 @@
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
-};
+use std::{collections::HashMap, path::PathBuf};
 
 use anyhow::Result;
-use clap::{Arg, Parser};
+use clap::Parser;
 use futures::StreamExt;
 use image::ImageReader;
-use indicatif::{ProgressBar, ProgressState, ProgressStyle};
+use indicatif::{ProgressBar, ProgressStyle};
 use rayon::iter::{ParallelBridge, ParallelIterator};
 use serde::Serialize;
 use walkdir::WalkDir;
@@ -17,12 +14,16 @@ const SUPPORTED_FILE_TYPES: [&str; 4] = ["jpg", "jpeg", "png", "webp"];
 
 // progress bar style
 const PROGRESS_BAR_TEMPLATE: &str =
-    "{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {pos:>7}/{len:7} ({eta})";
+    "{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {pos:>7}/{len:7}";
+// showing eta will slow down the progress bar
 
 #[derive(Debug, Clone, Parser)]
 struct Cli {
     /// The input directory to search for images
     input_dir: PathBuf,
+
+    #[arg(short, long, default_value_t = num_cpus::get())]
+    threads: usize,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -40,6 +41,7 @@ fn get_progress_bar(size: u64) -> Result<ProgressBar> {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
     let input_dir = cli.input_dir;
+    let threads = cli.threads;
 
     if tokio::fs::metadata(&input_dir).await?.is_dir() {
         println!("Input directory: {:?}", input_dir);
@@ -48,9 +50,12 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
+    println!("Checking for all files...");
+
     let files_len = std::fs::read_dir(&input_dir)?.count();
 
-    println!("Found {} files", files_len);
+    println!("Found {} files!", files_len);
+    println!("Filtering files...");
 
     let progress = get_progress_bar(files_len as u64)?;
     let paths = progress
@@ -78,6 +83,7 @@ async fn main() -> Result<()> {
     let paths_len = paths.len();
 
     println!("Found {} images with captions", paths_len);
+    println!("Caching metadata...");
 
     let progress = get_progress_bar(paths_len as u64)?;
     let metas = progress
@@ -102,7 +108,7 @@ async fn main() -> Result<()> {
                 ))
             })
         })
-        .buffer_unordered(num_cpus::get())
+        .buffer_unordered(threads)
         .map(|res| res?)
         .collect::<Vec<_>>()
         .await
