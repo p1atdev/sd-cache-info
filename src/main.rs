@@ -1,13 +1,12 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::Parser;
-use futures::StreamExt;
+use futures::{stream, StreamExt, TryStreamExt};
 use image::ImageReader;
-use indicatif::{ProgressBar, ProgressStyle};
-use rayon::iter::{ParallelBridge, ParallelIterator};
+use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use serde::Serialize;
-use walkdir::WalkDir;
 
 // image extensions
 const SUPPORTED_FILE_TYPES: [&str; 4] = ["jpg", "jpeg", "png", "webp"];
@@ -52,72 +51,67 @@ async fn main() -> Result<()> {
 
     println!("Checking for all files...");
 
-    let files_len = std::fs::read_dir(&input_dir)?.count();
+    let read_dir = std::fs::read_dir(&input_dir)?
+        .filter_map(Result::ok)
+        .collect::<Vec<_>>();
+    let files_len = read_dir.len();
 
     println!("Found {} files!", files_len);
     println!("Filtering files...");
 
-    let progress = get_progress_bar(files_len as u64)?;
-    let paths = progress
-        .wrap_iter(WalkDir::new(&input_dir).into_iter())
-        .par_bridge() // イテレータを並列処理する
-        .filter_map(|entry| entry.ok())
-        .filter(|entry| {
-            entry.file_type().is_file()
-                && entry
-                    .path()
-                    .extension()
-                    .and_then(|ext| ext.to_str())
-                    .map_or(false, |ext_str| SUPPORTED_FILE_TYPES.contains(&ext_str))
-                    &&
+    let paths = read_dir
+        .par_iter()
+        .progress_with(get_progress_bar(files_len as u64)?)
+        .filter_map(|entry| {
+            let img_path = entry.path();
+            let txt_path = img_path.with_extension("txt"); // caption file
+
+            img_path
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .map_or(None, |img_ext| {
                     // must a txt file with the same name exists
-                    entry
-                        .path()
-                        .with_extension("txt")
-                        .exists()
+                    if SUPPORTED_FILE_TYPES.contains(&img_ext) && txt_path.exists() {
+                        Some(img_path.to_path_buf())
+                    } else {
+                        None
+                    }
+                })
         })
-        .map(|entry| entry.path().to_path_buf())
         .collect::<Vec<_>>();
-    progress.finish();
 
     let paths_len = paths.len();
 
-    println!("Found {} images with captions", paths_len);
+    println!("Found {} images with captions!", paths_len);
     println!("Caching metadata...");
 
     let progress = get_progress_bar(paths_len as u64)?;
     let metas = progress
-        .wrap_stream(futures::stream::iter(paths))
-        .map(|path| {
+        .wrap_stream(stream::iter(paths))
+        .map(|path| async move {
             let image_path = path.clone();
             let txt_path = path.with_extension("txt");
 
-            tokio::spawn(async move {
-                let image = ImageReader::open(&image_path)?;
-                let txt = tokio::fs::read_to_string(txt_path).await?;
+            let image = ImageReader::open(&image_path)?;
+            let txt = tokio::fs::read_to_string(txt_path).await?;
 
-                let resolution = image.into_dimensions()?;
-                let caption = txt.trim().to_string();
+            let resolution = image.into_dimensions()?;
+            let caption = txt.trim().to_string();
 
-                Result::<_>::Ok((
-                    image_path.canonicalize()?,
-                    SubsetInfo {
-                        caption,
-                        resolution,
-                    },
-                ))
-            })
+            Result::<_>::Ok((
+                image_path.canonicalize()?,
+                SubsetInfo {
+                    caption,
+                    resolution,
+                },
+            ))
         })
         .buffer_unordered(threads)
-        .map(|res| res?)
-        .collect::<Vec<_>>()
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>>>()?
-        .into_iter()
-        .collect::<HashMap<_, _>>();
+        .try_collect::<Vec<_>>()
+        .await?;
     progress.finish();
 
+    println!("Metadata cached!");
     println!("Saving metadata cache...");
 
     let metadata_cache_path = &input_dir.join("metadata_cache.json");
