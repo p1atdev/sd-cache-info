@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf};
 
 use anyhow::Result;
 use clap::Parser;
@@ -13,8 +13,7 @@ const SUPPORTED_FILE_TYPES: [&str; 4] = ["jpg", "jpeg", "png", "webp"];
 
 // progress bar style
 const PROGRESS_BAR_TEMPLATE: &str =
-    "{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {pos:>7}/{len:7}";
-// showing eta will slow down the progress bar
+    "{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {pos:>7}/{len:7} ({eta})";
 
 #[derive(Debug, Clone, Parser)]
 struct Cli {
@@ -107,7 +106,7 @@ async fn main() -> Result<()> {
             ))
         })
         .buffer_unordered(threads)
-        .try_collect::<Vec<_>>()
+        .try_collect::<HashMap<_, _>>()
         .await?;
     progress.finish();
 
